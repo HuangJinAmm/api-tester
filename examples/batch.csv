@@ -1,0 +1,6 @@
+case,enabled,repeat,username,password
+login.md,true,1,admin,123456
+loadtest.md,true,1,,
+text.md,true,1,admin,
+form.md,true,1,admin,123456
+download.md,false,1,,
