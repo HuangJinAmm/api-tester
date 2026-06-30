@@ -39,3 +39,16 @@ url = "2"
 [dev-dependencies]
 tempfile = "3"
 wiremock = "0.6"
+
+# 编译优化配置
+[profile.release]
+# 开启最高级别的代码优化，优化执行速度
+opt-level = 3
+# 移除所有调试信息，减小二进制文件体积
+strip = true
+# 开启链接时优化(LTO)，提升程序性能
+lto = true
+# 优化代码体积，同时保持性能
+codegen-units = 1
+# 启用panic的abort模式，移除不必要的栈展开信息，减小文件体积
+panic = "abort"
