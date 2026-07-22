@@ -42,10 +42,41 @@ Per-case controls can be placed in the Markdown header list:
 - field:description=hello {{username}}
 - upload:avatar=./avatar.png
 - assert-status:200
+- assert-status-in:200-299
 - assert-header:content-type=application/json
+- assert-header-exists:content-type
+- assert-header-not-equals:content-type=text/html
 - assert-body-contains:token
+- assert-body-not-contains:error
+- assert-body-matches:\d{3}-\d{4}
 - assert-json:user.name=admin
+- assert-json-not-equals:user.name=guest
+- assert-json-exists:user.name
+- assert-json-type:user.age=number
+- assert-latency-max:500
 ```
+
+### Response Assertions
+
+All assertions are first-class DSL entries in the Markdown header list. JSON
+path supports dotted keys, array indices (`tags[0]`, `items[1].id`), and a
+wildcard existence check (`tags[*]`).
+
+| DSL | Description |
+| --- | --- |
+| `assert-status:<code>` | Exact status code match. |
+| `assert-status-in:<from>-<to>` | Status code within inclusive range. |
+| `assert-header:<key>=<value>` | Header equals value (case-insensitive key). |
+| `assert-header-exists:<key>` | Header is present. |
+| `assert-header-not-equals:<key>=<value>` | Header does not equal value. |
+| `assert-body-contains:<text>` | Body contains substring. |
+| `assert-body-not-contains:<text>` | Body does not contain substring. |
+| `assert-body-matches:<regex>` | Body matches a Rust regex. |
+| `assert-json:<path>=<value>` | JSON path equals value. |
+| `assert-json-not-equals:<path>=<value>` | JSON path does not equal value. |
+| `assert-json-exists:<path>` | JSON path exists. |
+| `assert-json-type:<path>=<type>` | JSON path value type. `<type>` ∈ `string\|number\|bool\|array\|object\|null` (with aliases `str`, `int`, `boolean`, `list`, ...). |
+| `assert-latency-max:<ms>` | Response latency must not exceed `<ms>` milliseconds. |
 
 ## Markdown DSL
 
@@ -166,6 +197,21 @@ Supported flags:
 
 Without `--load`, `--report-json` writes a single-case JSON report. `--report-junit` writes JUnit XML for single-case, batch, and load runs.
 
+### Fixed-QPS throttling
+
+When `--qps` is set, a token-bucket limiter caps the aggregate request rate
+across all users:
+
+- A dedicated refiller task releases one token per `1/qps` second using
+  `tokio::time::interval` with `MissedTickBehavior::Delay`, so the long-term
+  rate stays anchored to the start time instead of drifting under load
+  (the previous `next = Instant::now() + interval` accumulated drift on
+  every wake-up).
+- Users acquire tokens concurrently through a `Semaphore` instead of
+  serializing on a `Mutex`, so in-flight requests overlap as intended.
+- Bucket capacity equals `--users`, which bounds how many tokens can
+  accumulate when the producer outpaces the consumers (no catch-up bursts).
+
 Output includes total requests, QPS, TPS, average latency, P90, P95, P99, success rate, and error count.
 
 ## Logs
@@ -193,6 +239,6 @@ cargo test
 
 ## Roadmap
 
-The current implementation focuses on the first MVP stages: Markdown parsing, CLI, HTTP request execution, JSON/text/raw/form-urlencoded bodies, headers, logging, templates, request-level variables, Rhai scripts, CSV batch variables and summary reports, cookie-backed sessions with optional persistence, downloads, multipart file/text fields, request timeout controls, custom CA loading, retry/backoff, fixed-QPS load throttling, JSON load reports, and async load-test metrics.
+The current implementation focuses on the first MVP stages: Markdown parsing, CLI, HTTP request execution, JSON/text/raw/form-urlencoded bodies, headers, logging, templates, request-level variables, Rhai scripts, CSV batch variables and summary reports, cookie-backed sessions with optional persistence, downloads, multipart file/text fields, request timeout controls, custom CA loading, retry/backoff, fixed-QPS load throttling with token-bucket scheduling, JSON load reports, async load-test metrics, and a first-class response assertion DSL (status range, header existence/equality/inequality, body contains/not-contains/regex, JSON path equals/not-equals/exists/type with array indices and wildcard, and latency ceiling).
 
-Planned extensions include richer cookie jar import/export, response assertions as first-class DSL, fixed-QPS scheduler precision improvements, streaming download progress, OpenAPI import, WebSocket/gRPC/MQTT, YAML DSL, plugin APIs, and Web UI.
+Planned extensions include richer cookie jar import/export, streaming download progress, OpenAPI import, WebSocket/gRPC/MQTT, YAML DSL, plugin APIs, and Web UI.

@@ -109,9 +109,54 @@ pub struct RequestOptions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Assertion {
     Status(u16),
+    StatusIn { from: u16, to: u16 },
     HeaderEquals { key: String, value: String },
+    HeaderNotEquals { key: String, value: String },
+    HeaderExists { key: String },
     BodyContains(String),
+    BodyNotContains(String),
+    BodyMatches { regex: String },
     JsonEquals { path: String, value: String },
+    JsonNotEquals { path: String, value: String },
+    JsonExists { path: String },
+    JsonType { path: String, ty: JsonType },
+    LatencyMax { ms: u128 },
+}
+
+/// Expected JSON value type for `Assertion::JsonType`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JsonType {
+    String,
+    Number,
+    Bool,
+    Array,
+    Object,
+    Null,
+}
+
+impl JsonType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::String => "string",
+            Self::Number => "number",
+            Self::Bool => "bool",
+            Self::Array => "array",
+            Self::Object => "object",
+            Self::Null => "null",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "string" | "str" | "text" => Some(Self::String),
+            "number" | "num" | "int" | "float" => Some(Self::Number),
+            "bool" | "boolean" => Some(Self::Bool),
+            "array" | "list" => Some(Self::Array),
+            "object" | "obj" | "map" => Some(Self::Object),
+            "null" | "none" => Some(Self::Null),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

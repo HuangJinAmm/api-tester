@@ -5,7 +5,8 @@ use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Parser, Tag, TagEnd};
 use crate::{
     error::{AppError, Result},
     model::{
-        Assertion, Body, FormField, HttpMethod, RequestOptions, TestCase, UploadSpec, VarSpec,
+        Assertion, Body, FormField, HttpMethod, JsonType, RequestOptions, TestCase, UploadSpec,
+        VarSpec,
     },
 };
 
@@ -191,6 +192,23 @@ impl ParseState {
             if let Ok(status) = raw_value.parse() {
                 self.assertions.push(Assertion::Status(status));
             }
+        } else if key.eq_ignore_ascii_case("assert-status-in") {
+            if let Some((from, to)) = raw_value.split_once('-')
+                && let (Ok(from), Ok(to)) = (from.trim().parse(), to.trim().parse())
+            {
+                self.assertions.push(Assertion::StatusIn { from, to });
+            }
+        } else if key.eq_ignore_ascii_case("assert-header-exists") {
+            self.assertions.push(Assertion::HeaderExists {
+                key: raw_value.trim().to_ascii_lowercase(),
+            });
+        } else if key.eq_ignore_ascii_case("assert-header-not-equals") {
+            if let Some((header, value)) = raw_value.split_once('=') {
+                self.assertions.push(Assertion::HeaderNotEquals {
+                    key: header.trim().to_ascii_lowercase(),
+                    value: value.trim().to_string(),
+                });
+            }
         } else if key.eq_ignore_ascii_case("assert-header") {
             if let Some((header, value)) = raw_value.split_once('=') {
                 self.assertions.push(Assertion::HeaderEquals {
@@ -201,12 +219,43 @@ impl ParseState {
         } else if key.eq_ignore_ascii_case("assert-body-contains") {
             self.assertions
                 .push(Assertion::BodyContains(raw_value.to_string()));
+        } else if key.eq_ignore_ascii_case("assert-body-not-contains") {
+            self.assertions
+                .push(Assertion::BodyNotContains(raw_value.to_string()));
+        } else if key.eq_ignore_ascii_case("assert-body-matches") {
+            self.assertions.push(Assertion::BodyMatches {
+                regex: raw_value.to_string(),
+            });
+        } else if key.eq_ignore_ascii_case("assert-json-exists") {
+            self.assertions.push(Assertion::JsonExists {
+                path: raw_value.trim().to_string(),
+            });
+        } else if key.eq_ignore_ascii_case("assert-json-not-equals") {
+            if let Some((path, value)) = raw_value.split_once('=') {
+                self.assertions.push(Assertion::JsonNotEquals {
+                    path: path.trim().to_string(),
+                    value: value.trim().to_string(),
+                });
+            }
+        } else if key.eq_ignore_ascii_case("assert-json-type") {
+            if let Some((path, ty)) = raw_value.split_once('=')
+                && let Some(ty) = JsonType::parse(ty)
+            {
+                self.assertions.push(Assertion::JsonType {
+                    path: path.trim().to_string(),
+                    ty,
+                });
+            }
         } else if key.eq_ignore_ascii_case("assert-json") {
             if let Some((path, value)) = raw_value.split_once('=') {
                 self.assertions.push(Assertion::JsonEquals {
                     path: path.trim().to_string(),
                     value: value.trim().to_string(),
                 });
+            }
+        } else if key.eq_ignore_ascii_case("assert-latency-max") {
+            if let Ok(ms) = raw_value.parse() {
+                self.assertions.push(Assertion::LatencyMax { ms });
             }
         } else if !key.is_empty() {
             self.headers.insert(key.to_string(), raw_value.to_string());
@@ -293,5 +342,41 @@ if response.status != 200 { fail("bad"); }
             form.body,
             Some(Body::FormUrlEncoded("a=1&b={{b}}".to_string()))
         );
+    }
+
+    #[test]
+    fn parses_extended_assertion_dsl() {
+        let md = r#"
+# Extended
+
+POST https://example.test
+
+- assert-status-in:200-299
+- assert-header-exists:content-type
+- assert-header-not-equals:content-type=text/html
+- assert-body-not-contains:error
+- assert-body-matches:\d+
+- assert-json-exists:user.name
+- assert-json-not-equals:user.name=admin
+- assert-json-type:user.age=number
+- assert-latency-max:500
+"#;
+        let case = parse_case(md, None).unwrap();
+        assert_eq!(case.assertions.len(), 9);
+    }
+
+    #[test]
+    fn ignores_invalid_extended_assertion_values() {
+        let md = r#"
+# Bad
+
+POST https://example.test
+
+- assert-status-in:not-a-range
+- assert-json-type:user.age=unknowntype
+- assert-latency-max:not-a-number
+"#;
+        let case = parse_case(md, None).unwrap();
+        assert!(case.assertions.is_empty());
     }
 }

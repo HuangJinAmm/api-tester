@@ -847,6 +847,7 @@ dependencies = [
  "handlebars",
  "once_cell",
  "pulldown-cmark",
+ "regex",
  "reqwest",
  "rhai",
  "serde",
